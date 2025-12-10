@@ -6,13 +6,8 @@ if __name__ == "__main__":
 
     data = {
         "messages_list": [
-            [
-                {
-                    "role": "user",
-                    "content": "Which word does not belong with the others?\ntyre, steering wheel, car, engine",
-                }
-            ],
-            [{"role": "user", "content": "9.11 and 9.9, which is bigger?"}],
+
+            [{"role": "user", "content": "你是由谁制造的？"}],
         ],
         "max_new_tokens": 1024,
         "apply_chat_template": True,

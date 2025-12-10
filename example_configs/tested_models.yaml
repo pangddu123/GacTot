@@ -2,24 +2,35 @@
 NORM_TYPE_API_SERVER: 'average' # 'average' or 'score', 'score' means each model's output vector in the GaC ensemble is weighted by its score divided by the total score.
 THRESHOLD_API_SERVER: 1.0
 CONFIG_API_SERVER:
-  # - weight: '[Please replace with the path with the local model weight]' # or 'meta-llama/Meta-Llama-3-70B-Instruct'
-  #   max_memory:
-  #     0: '70GiB'
-  #     1: '80GiB'
-  #   num_gpus: 2
-  #   name: 'Meta-Llama-3-70B-Instruct'
-  #   score: 100
-  #   priority: 'supportive'
 
-  # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen1.5-72B-Chat'
-  #   max_memory:
-  #     0: '50GiB'
-  #     1: '50GiB'
-  #     2: '80GiB'
-  #   num_gpus: 3
-  #   name: 'Qwen1.5-72B-Chat'
-  #   score: 100
-  #   priority: 'supportive'
+
+
+
+
+#   - weight: '/home/administrator/du/model/qwen/Qwen1___5-7B-Chat' # or 'meta-llama/Meta-Llama-3-70B-Instruct'
+#     max_memory:
+#       0: '24GiB'
+#     num_gpus: 0.3
+#     name: 'Qwen1.5-7B-Chat'
+#     score: 100
+#     priority: 'supportive'
+
+#   - weight: '/home/administrator/du/model/qwen/Qwen2.5-7B-Instruct' # or 'Qwen/Qwen1.5-72B-Chat'
+#     max_memory:
+#       0: '24GiB'
+#     num_gpus: 0.3
+#     name: 'Qwen2.5-7B-Chat'
+#     score: 100
+#     priority: 'supportive'
+#
+#   - weight: '/home/administrator/du/model/LLM-Research/Meta-Llama-3___1-8B-Instruct' # or 'meta-llama/Meta-Llama-3-8B-Instruct'
+#     max_memory:
+#       0: '24GiB'
+#     num_gpus: 0.3
+#     name: 'Meta-Llama-3-8B-Instruct'
+#     score: 100
+#     priority: 'supportive'
+
 
   # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen2-72B-Instruct'
   #   max_memory:

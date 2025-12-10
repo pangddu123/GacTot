@@ -161,83 +161,114 @@ def calculate_uncertainty_weights(probs_list, k=50):
     return weights_tensor
 
 
+# utils/gac_gen_utils.py
+# utils/gac_gen_utils.py
+
 def merge_and_convert_tokens_tot(
         outputs,
         tokenizers,
         mapping_matrices,
         primary_index,
-        index_to_vocab,  # Main model's vocab map
+        index_to_vocab,
         special_prefix_tokens_dict,
         byte_mappings_list
 ):
     """
-    ToT 核心集成逻辑：
-    1. 将 Assist 模型输出映射到 Main 模型空间
-    2. 计算不确定性权重
-    3. 加权融合
-    4. 选出 Main Token
-    5. 将 Main Token 转换回所有模型的 Input IDs
+    ToT 核心集成逻辑（修复设备不匹配 + 双向维度对齐）
     """
 
     # 1. 映射到 Main 空间
     mapped_probs_list = []
 
-    # Main model 的输出直接使用
+    # 获取 Main model 的输出作为基准
     main_probs = outputs[primary_index]
-
-    # 确保都在同一设备
-    device = main_probs.device
+    target_vocab_size = main_probs.shape[1]  # e.g., 151936
 
     for i, output in enumerate(outputs):
-        if output is None:  # Should not happen in "Every Step" mode
+        if output is None:
             continue
 
         if i == primary_index:
             mapped_probs_list.append(output)
         else:
-            # Assist -> Main 映射
-            # output shape: [1, Assist_Vocab], Matrix shape: [Assist_Vocab, Main_Vocab]
-            # ToT 论文公式: p_aligned = T^T * p_assist
-            # 这里是行向量乘法: p_aligned = p_assist * Matrix
+            # 获取映射矩阵
             mapping_mat = mapping_matrices[i]
 
-            # 执行稀疏矩阵乘法
-            # 注意：ToT 论文要求 Row-Normalize 矩阵。我们可以在这里做简单的概率归一化
-            mapped_prob = torch.sparse.mm(mapping_mat.t(), output.t()).t()  # 转置处理维度匹配
+            # --- Fix 1: 设备对齐 ---
+            if mapping_mat.device != output.device:
+                mapping_mat = mapping_mat.to(output.device)
 
-            # 归一化映射后的概率 (可选，增加数值稳定性)
+            # --- Fix 2: 输入维度对齐 (Model Output -> Matrix Input) ---
+            # 截断模型输出以匹配矩阵输入维度 (e.g. 152064 -> 151643)
+            matrix_input_dim = mapping_mat.shape[0]
+            model_output_dim = output.shape[1]
+
+            if model_output_dim > matrix_input_dim:
+                output_aligned = output[:, :matrix_input_dim]
+            elif model_output_dim < matrix_input_dim:
+                padding = torch.zeros(
+                    (output.shape[0], matrix_input_dim - model_output_dim),
+                    device=output.device,
+                    dtype=output.dtype
+                )
+                output_aligned = torch.cat([output, padding], dim=1)
+            else:
+                output_aligned = output
+
+            # 执行稀疏矩阵乘法
+            # [1, Assist_Vocab] * [Assist_Vocab, Main_Vocab_Tokenizer] -> [1, Main_Vocab_Tokenizer]
+            mapped_prob = torch.sparse.mm(mapping_mat.t(), output_aligned.t()).t()
+
+            # 归一化
             mapped_prob = mapped_prob / (mapped_prob.sum(dim=-1, keepdim=True) + 1e-8)
+
+            # --- Fix 3: 输出维度对齐 (Matrix Output -> Main Model Output) ---
+            # 补齐/截断矩阵输出以匹配主模型输出维度 (e.g. 151643 -> 151936)
+            current_dim = mapped_prob.shape[1]
+            if current_dim < target_vocab_size:
+                # 补零 (Padding)
+                padding = torch.zeros(
+                    (mapped_prob.shape[0], target_vocab_size - current_dim),
+                    device=mapped_prob.device,
+                    dtype=mapped_prob.dtype
+                )
+                mapped_prob = torch.cat([mapped_prob, padding], dim=1)
+            elif current_dim > target_vocab_size:
+                # 截断 (Truncate)
+                mapped_prob = mapped_prob[:, :target_vocab_size]
+
             mapped_probs_list.append(mapped_prob)
 
-    # 2. 计算不确定性权重 (Uncertainty-Aware)
-    # 也可以简单使用配置中的固定权重，这里演示 ToT 的动态权重
+    # 2. 计算不确定性权重
     dynamic_weights = calculate_uncertainty_weights(mapped_probs_list)
 
     # 3. 加权融合
     final_probs = torch.zeros_like(main_probs)
     for w, p in zip(dynamic_weights, mapped_probs_list):
+        if p.device != final_probs.device:
+            p = p.to(final_probs.device)
         final_probs += w * p
 
     # 4. 选出 Main Token
     next_token_id_main = torch.argmax(final_probs, dim=-1).item()
 
-    # 获取 Main Token 的文本形式
-    # 注意：使用 Main Tokenizer 解码
+    # Main Token 解码
     main_tokenizer = tokenizers[primary_index]
     next_token_text = main_tokenizer.decode([next_token_id_main])
 
-    logger.info(f"ToT Selected Token: '{next_token_text}' (Main ID: {next_token_id_main})")
+    # 日志
+    # try:
+    #     logger.info(f"ToT Selected: '{next_token_text}' (ID: {next_token_id_main})")
+    # except:
+    #     pass
 
-    # 5. 回传：将选出的 Token 文本转换为各模型的 Token ID
+    # 5. 回传
     batch_token_ids = []
 
     for i, tokenizer in enumerate(tokenizers):
         if i == primary_index:
-            # 主模型直接用选出的 ID
             batch_token_ids.append([[next_token_id_main]])
         else:
-            # 辅助模型：Text -> Assist Token ID
-            # 复用 GaC 原有的 get_token_ids 逻辑，它处理了前缀空格等棘手问题
             special_prefix = special_prefix_tokens_dict[tokenizer]
             byte_mapping = byte_mappings_list[i]
 
@@ -250,8 +281,6 @@ def merge_and_convert_tokens_tot(
             batch_token_ids.append([token_ids])
 
     return batch_token_ids
-
-
 def generate_ensemnble_response(
     model_actors_list,
     model_name_list,
@@ -816,7 +845,7 @@ def check_threshold_ensemble(tmp_outputs_refs, primary_index, threshold):
         outputs_times (list): A list of processing times for each model's output.
         need_ensemble (bool): A flag indicating whether ensemble processing is needed.
     """
-    if primary_index == -1:
+    if primary_index == -1 or threshold >= 1.0:
         tmp = ray.get(tmp_outputs_refs)
         outputs = [t[0] for t in tmp]
         outputs_times = [t[1] for t in tmp]
