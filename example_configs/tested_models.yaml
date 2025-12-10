@@ -1,0 +1,130 @@
+# We have listed the models tested for GaC ensemble. This does not mean that models outside of this file (e.g., the latest ones) are not supported.
+NORM_TYPE_API_SERVER: 'average' # 'average' or 'score', 'score' means each model's output vector in the GaC ensemble is weighted by its score divided by the total score.
+THRESHOLD_API_SERVER: 1.0
+CONFIG_API_SERVER:
+  # - weight: '[Please replace with the path with the local model weight]' # or 'meta-llama/Meta-Llama-3-70B-Instruct'
+  #   max_memory:
+  #     0: '70GiB'
+  #     1: '80GiB'
+  #   num_gpus: 2
+  #   name: 'Meta-Llama-3-70B-Instruct'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen1.5-72B-Chat'
+  #   max_memory:
+  #     0: '50GiB'
+  #     1: '50GiB'
+  #     2: '80GiB'
+  #   num_gpus: 3
+  #   name: 'Qwen1.5-72B-Chat'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen2-72B-Instruct'
+  #   max_memory:
+  #     0: '50GiB'
+  #     1: '50GiB'
+  #     2: '80GiB'
+  #   num_gpus: 3
+  #   name: 'Qwen2-72B-Instruct'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+  #   max_memory:
+  #     0: '50GiB'
+  #     1: '80GiB'
+  #   num_gpus: 2
+  #   name: 'Mixtral-8x7B-Instruct-v0.1'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO'
+  #   max_memory:
+  #     0: '50GiB'
+  #     1: '80GiB'
+  #   num_gpus: 2
+  #   name: 'Nous-Hermes-2-Mixtral-8x7B-DPO'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen1.5-32B-Chat'
+  #   max_memory:
+  #     0: '80GiB'
+  #   num_gpus: 1
+  #   name: 'Qwen1.5-32B-Chat'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen1.5-14B-Chat'
+  #   max_memory:
+  #     0: '40GiB'
+  #   num_gpus: 0.5
+  #   name: 'Qwen1.5-14B-Chat'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen1.5-7B-Chat'
+  #   max_memory:
+  #     0: '24GiB'
+  #   num_gpus: 0.5
+  #   name: 'Qwen1.5-7B-Chat'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'meta-llama/Meta-Llama-3-8B-Instruct'
+  #   max_memory:
+  #     0: '24GiB'
+  #   num_gpus: 0.5
+  #   name: 'Meta-Llama-3-8B-Instruct'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'mistralai/Mistral-7B-Instruct-v0.2'
+  #   max_memory:
+  #     0: '24GiB'
+  #   num_gpus: 0.5
+  #   name: 'Mistral-7B-Instruct-v0.2'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or '01-ai/Yi-34B-Chat'
+  #   max_memory:
+  #     0: '80GiB'
+  #   num_gpus: 1
+  #   name: 'Yi-34B-Chat'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'upstage/SOLAR-10.7B-Instruct-v1.0'
+  #   max_memory:
+  #     0: '40GiB'
+  #   num_gpus: 0.5
+  #   name: 'SOLAR-10.7B-Instruct-v1.0'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'openchat/openchat-3.5-0106'
+  #   max_memory:
+  #     0: '24GiB'
+  #   num_gpus: 0.5
+  #   name: 'openchat-3.5-0106'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'openchat/openchat_3.5'
+  #   max_memory:
+  #     0: '24GiB'
+  #   num_gpus: 0.5
+  #   name: 'openchat_3.5'
+  #   score: 100
+  #   priority: 'supportive'
+
+  # - weight: '[Please replace with the path with the local model weight]' # or 'NousResearch/Nous-Hermes-2-SOLAR-10.7B'
+  #   max_memory:
+  #     0: '40GiB'
+  #   num_gpus: 0.5
+  #   name: 'Nous-Hermes-2-SOLAR-10.7B'
+  #   score: 100
+  #   priority: 'supportive'

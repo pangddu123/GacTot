@@ -1,0 +1,22 @@
+# This is a configuration file assuming the availability of an 80GiB GPU (A100 or H100).
+# If you want to perform ensemble at each generation step, please ensure that the 'priority' for all models is set to 'supportive'. The threshold will be ignored.
+NORM_TYPE_API_SERVER: 'average' # 'average' or 'score', 'score' means each model's output vector in the GaC ensemble is weighted by its score divided by the total score.
+THRESHOLD_API_SERVER: 1.0
+CONFIG_API_SERVER:
+  - weight: '[Please replace with the path with the local model weight]' # or 'upstage/SOLAR-10.7B-Instruct-v1.0'
+    max_memory:
+      0: '24GiB'
+    num_gpus: 0.5
+    name: 'SOLAR-10.7B-Instruct-v1.0'
+    score: 100
+    priority: 'supportive'
+    quantization: 'none' # 'none'/'8bit'/'4bit'
+  
+  - weight: '[Please replace with the path with the local model weight]' # or 'openchat/openchat-3.5-0106'
+    max_memory:
+      0: '24GiB'
+    num_gpus: 0.5
+    name: 'openchat-3.5-0106'
+    score: 100
+    priority: 'supportive'
+    quantization: 'none' # 'none'/'8bit'/'4bit'
