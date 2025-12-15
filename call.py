@@ -7,7 +7,7 @@ if __name__ == "__main__":
     data = {
         "messages_list": [
 
-            [{"role": "user", "content": "你是由谁制造的？"}],
+            [{"role": "user", "content": "who are you"}],
         ],
         "max_new_tokens": 1024,
         "apply_chat_template": True,

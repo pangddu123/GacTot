@@ -80,24 +80,30 @@ class ModelGenerator:
         self.model.generation_config.temperature = 1.0
         self.model.generation_config.top_p = 1.0
 
-        if (
-            isinstance(self.model.generation_config.eos_token_id, list)
-            and len(self.model.generation_config.eos_token_id) > 1
-        ):
-            logger.warning(
-                f"For model {self.model_name}, the eos_token_id in generation_config more than one, we only take first one."
-            )
-            self.model.generation_config.eos_token_id = self.model.generation_config.eos_token_id[
-                0
-            ]
+        # if (
+        #     isinstance(self.model.generation_config.eos_token_id, list)
+        #     and len(self.model.generation_config.eos_token_id) > 1
+        # ):
+        #     logger.warning(
+        #         f"For model {self.model_name}, the eos_token_id in generation_config more than one, we only take first one."
+        #     )
+        #     self.model.generation_config.eos_token_id = self.model.generation_config.eos_token_id[
+        #         0
+        #     ]
 
-        if self.model.generation_config.eos_token_id and (
-            self.model.generation_config.eos_token_id != self.tokenizer.eos_token_id
-        ):
-            logger.warning(
-                f"For model {self.model_name}, the eos_token_id is inconsistent between the generation config and the tokenizer ({self.model.generation_config.eos_token_id} and {self.tokenizer.eos_token_id}). We will forcefully set the tokenizer to be consistent with the generation config ({self.model.generation_config.eos_token_id})."
-            )
-            self.tokenizer.eos_token_id = self.model.generation_config.eos_token_id
+        if self.model.generation_config.eos_token_id:
+            # 检查是否一致 (支持 list 比较)
+            config_eos = self.model.generation_config.eos_token_id
+            tokenizer_eos = self.tokenizer.eos_token_id
+
+            # 简单比较：如果不相等，且不是包含关系，则覆盖
+            if config_eos != tokenizer_eos:
+                # 注意：如果 tokenizer.eos_token_id 只能接受 int，而 config 是 list，
+                # 我们通常把 config 的第一个给 tokenizer 作为默认 EOS，但保留 config 的 list 用于生成控制
+                if isinstance(config_eos, list) and len(config_eos) > 0:
+                    self.tokenizer.eos_token_id = config_eos[0]
+                else:
+                    self.tokenizer.eos_token_id = config_eos
 
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
@@ -169,7 +175,24 @@ class ModelGenerator:
         self.state["model_kwargs"]["use_cache"] = self.use_cache
 
     def get_max_position_embeddings(self):
-        return self.model.config.max_position_embeddings
+        # 兼容不同模型的配置属性名
+        config = self.model.config
+
+        # 1. 标准属性 (LLaMA, Qwen, BERT, etc.)
+        if hasattr(config, "max_position_embeddings"):
+            return config.max_position_embeddings
+
+        # 2. ChatGLM 系列 (GLM-4)
+        elif hasattr(config, "seq_length"):
+            return config.seq_length
+
+        # 3. 其他常见变体 (e.g. GPT-2, MPT)
+        elif hasattr(config, "max_sequence_length"):
+            return config.max_sequence_length
+        elif hasattr(config, "n_positions"):
+            return config.n_positions
+        else:
+            return None
 
     def get_model_name(self):
         return self.model_name

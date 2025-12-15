@@ -20,7 +20,26 @@ from .logger import setup_custom_logger
 
 logger = setup_custom_logger("TSP")
 
-
+# --- 新增辅助函数 ---
+def get_string_vocab(tokenizer):
+    """
+    Helper function to safely get vocab with string keys.
+    Some tokenizers (like GLM-4) return bytes keys which breaks string operations.
+    """
+    vocab = tokenizer.get_vocab()
+    new_vocab = {}
+    for k, v in vocab.items():
+        if isinstance(k, bytes):
+            try:
+                # 尝试解码为 UTF-8
+                k_str = k.decode('utf-8')
+                new_vocab[k_str] = v
+            except:
+                # 解码失败的二进制 Token (通常不用于文本生成)，保留其 repr 或跳过
+                new_vocab[str(k)] = v
+        else:
+            new_vocab[k] = v
+    return new_vocab
 
 @ray.remote
 def create_tot_mapping_matrix_remote(assist_tokenizer, main_tokenizer, alpha=0.5, batch_size=2048):
@@ -577,12 +596,27 @@ def update_input_ids_and_model_kwargs(model, state):
     if eos_token_id_tensor is not None:
         for i, tokens in enumerate(next_tokens):
             for token in tokens:
-                unfinished_sequences[i] = unfinished_sequences[i] & (
-                    token != eos_token_id_tensor
-                )
+                # --- 修改开始：支持多 EOS Token 检查 ---
+                # 检查当前 token 是否在 EOS 列表中
+                # eos_token_id_tensor 可能是 scalar 也可能是 vector
+                if eos_token_id_tensor.numel() > 1:
+                    # 如果是列表，使用 isin 检查
+                    is_eos = torch.isin(token, eos_token_id_tensor)
+                else:
+                    # 如果是标量，直接比较
+                    is_eos = (token == eos_token_id_tensor)
+
+                # 如果是 EOS (is_eos为True)，则 unfinished 变为 False (0)
+                # 逻辑：unfinished = unfinished AND (NOT is_eos)
+                # 注意保持 tensor 类型转换，确保 unfinished_sequences[i] 还是一个标量/0维张量
+                if is_eos:
+                    unfinished_sequences[i] = 0
+                    # --- 修改结束 ---
 
     return padded_input_ids_tensor, model_kwargs, unfinished_sequences
 
+
+# utils/gac_gen_utils.py
 
 def check_byte_mappings(tokenizer):
     """
@@ -598,9 +632,24 @@ def check_byte_mappings(tokenizer):
                            value is the corresponding token ID for that byte representation
                            within the tokenizer's vocabulary.
     """
-    vocab = tokenizer.get_vocab()
+    # 确保使用 get_string_vocab 处理 bytes 类型的 key (如果你之前添加了这个辅助函数)
+    try:
+        vocab = get_string_vocab(tokenizer)
+    except NameError:
+        # 兼容性回退
+        raw_vocab = tokenizer.get_vocab()
+        vocab = {}
+        for k, v in raw_vocab.items():
+            if isinstance(k, bytes):
+                try:
+                    vocab[k.decode('utf-8')] = v
+                except:
+                    continue
+            else:
+                vocab[k] = v
+
     g_prefix_count = sum(token.startswith("Ġ") for token in vocab)
-    u_prefix_count = sum(token.startswith("▁") for token in vocab)
+    u_prefix_count = sum(token.startswith(" ") for token in vocab)
 
     byte_mapping = {}
 
@@ -618,10 +667,12 @@ def check_byte_mappings(tokenizer):
             # For cases like "\t" being replaced in vocab
             if hex_token == "<0x09>" and hex_token not in vocab:
                 continue
+
+            # --- 修复核心：找不到 Token 时跳过，而不是报错 ---
             if hex_token not in vocab:
-                raise ValueError(
-                    f"Token {hex_token} not found in tokenizer's vocabulary."
-                )
+                # GLM-4 等模型可能没有 <0x..> Token，这是正常的，直接忽略
+                continue
+
             byte_mapping[hex_token] = vocab[hex_token]
 
     return byte_mapping
@@ -665,7 +716,7 @@ def get_vocab_union_and_mapping(tokenizers):
 
     # Process each tokenizer separately
     for tokenizer in tokenizers:
-        vocab = tokenizer.get_vocab()
+        vocab = get_string_vocab(tokenizer)
         token_set = set()
         mapping = {}
 
@@ -1036,71 +1087,72 @@ def get_token_ids(tokenizer, token, special_prefix_token, byte_mapping):
         logger.warning(f"Warning: Token '{token}' may not be tokenized as expected.")
     return tokenizer.encode(token, add_special_tokens=False)
 
+# utils/gac_gen_utils.py
 
 def find_special_underscore_token(tokenizer):
     """
-    Identifies the shortest special token in the tokenizer's vocabulary that starts with '▁',
-    which is neither part of any other token nor contains any other token (except '▁' itself).
-    '▁' itself and tokens resulting in only whitespace after '▁' is removed are also excluded 
-    from the result.
-    
-    Args:
-        tokenizer: An instance of a tokenizer class with a 'get_vocab()' method, returning 
-                   a dictionary of tokens and their IDs.
-
-    Returns:
-        str: The shortest special token meeting the criteria, with '▁' removed, sorted
-             lexicographically to ensure consistency. Raises an error if no such token is found.
-
-    The function first checks the prevalence of tokens starting with 'Ġ' and '▁'. If tokens
-    starting with 'Ġ' are more prevalent, it returns an empty string. Otherwise, it proceeds
-    to find the shortest token starting with '▁', which is not part of any other token and
-    does not contain any other tokens (except for the initial '▁'), and is not just whitespace
-    after '▁' is removed. It then removes '▁' from the token before returning it. If no such
-    token is found, an error is raised.
+    Identifies the shortest special token in the tokenizer's vocabulary that starts with ' '.
+    Modified to include a fallback mechanism for GLM-4 and other models.
     """
+    # 确保使用了 get_string_vocab (如果你在上一步添加了这个辅助函数)
+    # 如果没有添加，请确保这里处理了 vocab keys 的类型
+    try:
+        vocab = get_string_vocab(tokenizer)
+    except NameError:
+        # 如果没有定义 get_string_vocab，回退到原始 get_vocab 并尝试手动解码
+        raw_vocab = tokenizer.get_vocab()
+        vocab = {}
+        for k, v in raw_vocab.items():
+            if isinstance(k, bytes):
+                try:
+                    vocab[k.decode('utf-8')] = v
+                except:
+                    continue
+            else:
+                vocab[k] = v
 
-    # get tokenizer vocab
-    vocab = tokenizer.get_vocab()
-
-    # Count tokens that start with 'Ġ' and '▁'
+    # 统计前缀类型
     count_prefix_G = sum(1 for token in vocab if token.startswith("Ġ"))
-    count_prefix_underscore = sum(1 for token in vocab if token.startswith("▁"))
+    count_prefix_underscore = sum(1 for token in vocab if token.startswith(" "))
 
-    # Return an empty string if 'Ġ' tokens are more frequent
+    # 如果是 GPT-2 风格 (Ġ)，直接返回空字符串，这是 GaC 的原生逻辑
     if count_prefix_G > count_prefix_underscore:
         return ""
 
-    # Filter tokens that start with '▁'
+    # 筛选以 ' ' 开头的 token
     underscore_tokens = [
-        token for token in vocab if token.startswith("▁") and token != "▁"
+        token for token in vocab if token.startswith(" ") and token != " "
     ]
 
-    # Filter tokens that meet the criteria
     special_tokens = []
+    # 如果列表太大，tqdm 可能会刷屏，可以去掉或保留
     for token in tqdm(underscore_tokens, desc="Analyzing tokens"):
-        cleaned_token = token[1:]  # remove '▁'
+        cleaned_token = token[1:]  # remove ' '
 
-        # Ensure the token is not part of another token, contains no additional tokens besides the first '▁',
-        # has no multiple '▁', and is not a space after removing '▁'
+        # 原始 GaC 的严格过滤逻辑：
+        # 寻找一个 token，它不是其他任何 token 的子串。
+        # 这个逻辑对 GLM-4 可能过于严格导致结果为空。
         if (
             not any(
                 token in other_token
                 for other_token in underscore_tokens
                 if other_token != token
             )
-            and token.count("▁") == 1
+            and token.count(" ") == 1
             and cleaned_token.strip() != ""
         ):
             special_tokens.append(cleaned_token)
 
-    # Raise an error if no token meets the criteria
+    # --- 修复核心：如果找不到，不要报错，而是返回默认的空格 ---
     if not special_tokens:
-        raise ValueError("No special underscore token found that meets the criteria.")
+        logger.warning(
+            f"No strict special underscore token found for {tokenizer.__class__.__name__}. "
+            "Falling back to default ' ' (space)."
+        )
+        return " "  # 回退到标准空格，这通常能工作
 
-    # Return the shortest token to ensure consistency
+    # 返回最短的那个
     return min(special_tokens, key=lambda x: (len(x), x))
-
 
 def get_special_prefix_tokens_for_all(tokenizers):
     """

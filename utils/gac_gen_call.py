@@ -1,5 +1,5 @@
 from typing import Any, Dict, List, Set, Tuple
-
+from transformers import AutoTokenizer  # <--- 新增引入
 import ray
 import yaml
 import torch
@@ -54,7 +54,33 @@ def setup_model_actors_and_data(config: List[Dict], norm_type: str, threshold: f
     ]
 
     # 4. 获取所有 Tokenizers 和 Model Names
-    tokenizers = ray.get([actor.get_tokenizer.remote() for actor in model_actors_list])
+    # 4. 获取所有 Tokenizers 和 Model Names
+    # --- 修改开始：在本地加载 Tokenizer，避免 Ray 序列化错误 ---
+    tokenizers = []
+    for model_config in config:
+        model_path = model_config["weight"]
+        model_name = model_config["name"]
+
+        # 复制 ray_actor.py 中的加载逻辑 (例如 Yi 模型需要 use_fast=False)
+        use_fast = True
+        if model_name in ["Yi-34B-Chat", "Yi-6B-Chat"]:
+            use_fast = False
+
+        logger.info(f"Loading tokenizer locally for {model_name}...")
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            padding_side="left",
+            use_fast=use_fast,
+            trust_remote_code=True
+        )
+
+        # 简单的修正，确保 pad_token 存在
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+        tokenizers.append(tokenizer)
+    # --- 修改结束 ---
+
     model_name_list = ray.get([actor.get_model_name.remote() for actor in model_actors_list])
 
     main_tokenizer = tokenizers[primary_index]
@@ -131,6 +157,10 @@ def setup_model_actors_and_data(config: List[Dict], norm_type: str, threshold: f
         primary_index,
         real_threshold,
     )
+
+
+
+
 
 def validate_and_update_quantization(model_config: List[Dict[str, str]]) -> List[Dict[str, str]]:
     """
