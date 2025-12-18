@@ -127,6 +127,9 @@ def create_tot_mapping_matrix_remote(assist_model_path, main_model_path, alpha=0
         assist_encodings = assist_tokenizer(texts, add_special_tokens=False).input_ids
 
         for k, assist_ids in enumerate(assist_encodings):
+
+
+
             if assist_ids:
                 main_id = batch_ids[k]
                 assist_prefix_id = assist_ids[0]  # Assist 视角的第一个 token
@@ -251,6 +254,12 @@ def merge_and_convert_tokens_tot(
             else:
                 output_aligned = output
 
+            # =========== 修改开始 ===========
+            # Fix: 确保 dense 矩阵 (output_aligned) 的类型与 sparse 矩阵 (mapping_mat) 一致
+            # mapping_mat 通常是 Float32，而 output 可能是 Half (Float16)
+            if output_aligned.dtype != mapping_mat.dtype:
+                output_aligned = output_aligned.to(mapping_mat.dtype)
+            # =========== 修改结束 ============
             # 执行稀疏矩阵乘法
             # [1, Assist_Vocab] * [Assist_Vocab, Main_Vocab_Tokenizer] -> [1, Main_Vocab_Tokenizer]
             mapped_prob = torch.sparse.mm(mapping_mat.t(), output_aligned.t()).t()
@@ -521,7 +530,16 @@ def update_input_ids_and_model_kwargs(model, state):
 
     # Check if pad_token_id is provided
     if pad_token_id is None:
-        raise ValueError("pad_token_id must be defined.")
+        # --- Fix Start: 如果没有 pad_token_id，尝试使用 eos_token_id ---
+        if eos_token_id_tensor is not None:
+            # 确保从 Tensor 中提取出 int 值
+            if eos_token_id_tensor.numel() > 1:
+                pad_token_id = eos_token_id_tensor[0].item()
+            else:
+                pad_token_id = eos_token_id_tensor.item()
+        else:
+            # 如果连 EOS 都没有，才抛出错误
+            raise ValueError("pad_token_id must be defined.")
 
     # Replace next_tokens with pad_token_id where sequences are finished
     next_tokens = [
