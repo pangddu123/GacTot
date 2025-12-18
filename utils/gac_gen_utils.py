@@ -492,33 +492,170 @@ def synchronize_unfinished_sequences(unfinished_sequences_list):
     return sync_tensor
 
 
+# def update_input_ids_and_model_kwargs(model, state):
+#     """
+#     Updates input_ids and model_kwargs for the next generation step in a language model,
+#     handling padding, attention mask adjustments, and tracking unfinished sequences.
+#
+#     Args:
+#     model: The language generation model being used.
+#     state (dict): A dictionary containing various states needed for generation, including:
+#         - outputs: The output from the previous generation step.
+#         - input_ids: The input IDs used in the previous generation step.
+#         - next_tokens_list: The list of next tokens to be added to input_ids.
+#         - model_kwargs: Additional model keyword arguments.
+#         - unfinished_sequences: A boolean list indicating which sequences are not finished.
+#         - pad_token_id: The ID used for padding.
+#         - eos_token_id_tensor: The ID of the end-of-sequence token.
+#
+#     Returns:
+#     tuple: A tuple containing:
+#         - padded_input_ids_tensor: The updated input_ids tensor after padding and adding next tokens.
+#         - model_kwargs: The updated model keyword arguments.
+#         - unfinished_sequences: The updated list indicating which sequences are still unfinished.
+#
+#     The function pads input_ids and next_tokens to the same length, updates attention masks,
+#     handles sequences that are finished by replacing tokens with pad_token_id, and adjusts
+#     model_kwargs for the next generation step. It also trims unnecessary padding from input_ids
+#     and attention_mask if any sequence has more than one token to add. Finally, it updates
+#     unfinished_sequences based on the presence of the eos_token_id.
+#     """
+#     outputs = state["outputs"]
+#     input_ids = state["input_ids"]
+#     next_tokens = state["next_tokens_list"]
+#     model_kwargs = state["model_kwargs"]
+#     unfinished_sequences = state["unfinished_sequences"]
+#     pad_token_id = state["pad_token_id"]
+#     eos_token_id_tensor = state["eos_token_id_tensor"]
+#
+#     # Check if pad_token_id is provided
+#     if pad_token_id is None:
+#         # --- Fix Start: 如果没有 pad_token_id，尝试使用 eos_token_id ---
+#         if eos_token_id_tensor is not None:
+#             # 确保从 Tensor 中提取出 int 值
+#             if eos_token_id_tensor.numel() > 1:
+#                 pad_token_id = eos_token_id_tensor[0].item()
+#             else:
+#                 pad_token_id = eos_token_id_tensor.item()
+#         else:
+#             # 如果连 EOS 都没有，才抛出错误
+#             raise ValueError("pad_token_id must be defined.")
+#
+#     # Replace next_tokens with pad_token_id where sequences are finished
+#     next_tokens = [
+#         tokens if unfinished else [pad_token_id] * len(tokens)
+#         for tokens, unfinished in zip(next_tokens, unfinished_sequences)
+#     ]
+#
+#     # Determine the device of input_ids
+#     device = input_ids.device
+#
+#     # Calculate the maximum length after adding next_tokens
+#     max_length = max([input_ids.shape[1] + len(tokens) for tokens in next_tokens])
+#
+#     # Pad input_ids and next_tokens to the same length
+#     padded_input_ids = []
+#     attention_masks = []  # To store the updated attention masks
+#     for i, tokens in enumerate(next_tokens):
+#         # Calculate padding size for input_ids
+#         input_padding_size = max_length - input_ids.shape[1] - len(tokens)
+#
+#         # Pad input_ids
+#         padded_input = torch.cat(
+#             [
+#                 torch.full(
+#                     (1, input_padding_size),
+#                     pad_token_id,
+#                     dtype=torch.long,
+#                     device=device,
+#                 ),
+#                 input_ids[i].unsqueeze(0),
+#                 torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0),
+#             ],
+#             dim=1,
+#         )
+#         padded_input_ids.append(padded_input)
+#
+#         # Update the attention mask
+#         if "attention_mask" in model_kwargs:
+#             original_attention_mask = model_kwargs["attention_mask"][i]
+#             updated_attention_mask = torch.cat(
+#                 [
+#                     torch.zeros(input_padding_size, dtype=torch.long, device=device),
+#                     original_attention_mask,
+#                     torch.ones(len(tokens), dtype=torch.long, device=device),
+#                 ]
+#             )
+#             attention_masks.append(updated_attention_mask)
+#
+#     # Convert the list of padded input_ids to a tensor
+#     padded_input_ids_tensor = torch.cat(padded_input_ids, dim=0)
+#     model_kwargs = model._update_model_kwargs_for_generation(
+#         outputs, model_kwargs, is_encoder_decoder=model.config.is_encoder_decoder
+#     )
+#
+#     # Update the attention masks in model_kwargs
+#     if attention_masks:
+#         model_kwargs["attention_mask"] = torch.stack(attention_masks)
+#         model_kwargs["cache_position"] = torch.tensor(
+#             [model_kwargs["attention_mask"].shape[1] - 1],
+#             dtype=torch.int64,
+#             device=model_kwargs["attention_mask"].device,
+#         )
+#
+#     # Update model_kwargs, set past_key_values to None if any sequence has more than one token to add
+#     if any(len(tokens) > 1 for tokens in next_tokens):
+#         model_kwargs["past_key_values"] = None
+#
+#         # Find the index of the first non-pad token for each sequence
+#         first_non_pad_indices = [
+#             input_id.ne(pad_token_id).nonzero(as_tuple=True)[0][0].item()
+#             if pad_token_id in input_id
+#             else 0
+#             for input_id in padded_input_ids_tensor
+#         ]
+#
+#         # Calculate the maximum number of leading pads that can be removed (minimum index of the first non-pad token)
+#         max_pads_to_remove = min(first_non_pad_indices)
+#
+#         # Remove the unnecessary leading pads
+#         if max_pads_to_remove > 0:
+#
+#             padded_input_ids_tensor = padded_input_ids_tensor[:, max_pads_to_remove:]
+#             if "attention_mask" in model_kwargs:
+#                 model_kwargs["attention_mask"] = model_kwargs["attention_mask"][
+#                     :, max_pads_to_remove:
+#                 ]
+#
+#     # Update unfinished_sequences based on eos_token_id
+#     if eos_token_id_tensor is not None:
+#         for i, tokens in enumerate(next_tokens):
+#             for token in tokens:
+#                 # --- 修改开始：支持多 EOS Token 检查 ---
+#                 # 检查当前 token 是否在 EOS 列表中
+#                 # eos_token_id_tensor 可能是 scalar 也可能是 vector
+#                 if eos_token_id_tensor.numel() > 1:
+#                     # 如果是列表，使用 isin 检查
+#                     is_eos = torch.isin(token, eos_token_id_tensor)
+#                 else:
+#                     # 如果是标量，直接比较
+#                     is_eos = (token == eos_token_id_tensor)
+#
+#                 # 如果是 EOS (is_eos为True)，则 unfinished 变为 False (0)
+#                 # 逻辑：unfinished = unfinished AND (NOT is_eos)
+#                 # 注意保持 tensor 类型转换，确保 unfinished_sequences[i] 还是一个标量/0维张量
+#                 if is_eos:
+#                     unfinished_sequences[i] = 0
+#                     # --- 修改结束 ---
+#
+#     return padded_input_ids_tensor, model_kwargs, unfinished_sequences
+#
+
 def update_input_ids_and_model_kwargs(model, state):
     """
-    Updates input_ids and model_kwargs for the next generation step in a language model,
-    handling padding, attention mask adjustments, and tracking unfinished sequences.
-
-    Args:
-    model: The language generation model being used.
-    state (dict): A dictionary containing various states needed for generation, including:
-        - outputs: The output from the previous generation step.
-        - input_ids: The input IDs used in the previous generation step.
-        - next_tokens_list: The list of next tokens to be added to input_ids.
-        - model_kwargs: Additional model keyword arguments.
-        - unfinished_sequences: A boolean list indicating which sequences are not finished.
-        - pad_token_id: The ID used for padding.
-        - eos_token_id_tensor: The ID of the end-of-sequence token.
-
-    Returns:
-    tuple: A tuple containing:
-        - padded_input_ids_tensor: The updated input_ids tensor after padding and adding next tokens.
-        - model_kwargs: The updated model keyword arguments.
-        - unfinished_sequences: The updated list indicating which sequences are still unfinished.
-
-    The function pads input_ids and next_tokens to the same length, updates attention masks,
-    handles sequences that are finished by replacing tokens with pad_token_id, and adjusts 
-    model_kwargs for the next generation step. It also trims unnecessary padding from input_ids
-    and attention_mask if any sequence has more than one token to add. Finally, it updates 
-    unfinished_sequences based on the presence of the eos_token_id.
+    Updates input_ids and model_kwargs for the next generation step.
+    FIXED: Strictly manages cache_position and position_ids for both Decoding and Prefill phases
+    to prevent shape mismatches in GLM-4 and Qwen/Llama models.
     """
     outputs = state["outputs"]
     input_ids = state["input_ids"]
@@ -530,15 +667,12 @@ def update_input_ids_and_model_kwargs(model, state):
 
     # Check if pad_token_id is provided
     if pad_token_id is None:
-        # --- Fix Start: 如果没有 pad_token_id，尝试使用 eos_token_id ---
         if eos_token_id_tensor is not None:
-            # 确保从 Tensor 中提取出 int 值
             if eos_token_id_tensor.numel() > 1:
                 pad_token_id = eos_token_id_tensor[0].item()
             else:
                 pad_token_id = eos_token_id_tensor.item()
         else:
-            # 如果连 EOS 都没有，才抛出错误
             raise ValueError("pad_token_id must be defined.")
 
     # Replace next_tokens with pad_token_id where sequences are finished
@@ -547,28 +681,19 @@ def update_input_ids_and_model_kwargs(model, state):
         for tokens, unfinished in zip(next_tokens, unfinished_sequences)
     ]
 
-    # Determine the device of input_ids
     device = input_ids.device
-
-    # Calculate the maximum length after adding next_tokens
     max_length = max([input_ids.shape[1] + len(tokens) for tokens in next_tokens])
 
     # Pad input_ids and next_tokens to the same length
     padded_input_ids = []
-    attention_masks = []  # To store the updated attention masks
+    attention_masks = []
+
     for i, tokens in enumerate(next_tokens):
-        # Calculate padding size for input_ids
         input_padding_size = max_length - input_ids.shape[1] - len(tokens)
 
-        # Pad input_ids
         padded_input = torch.cat(
             [
-                torch.full(
-                    (1, input_padding_size),
-                    pad_token_id,
-                    dtype=torch.long,
-                    device=device,
-                ),
+                torch.full((1, input_padding_size), pad_token_id, dtype=torch.long, device=device),
                 input_ids[i].unsqueeze(0),
                 torch.tensor(tokens, dtype=torch.long, device=device).unsqueeze(0),
             ],
@@ -576,7 +701,6 @@ def update_input_ids_and_model_kwargs(model, state):
         )
         padded_input_ids.append(padded_input)
 
-        # Update the attention mask
         if "attention_mask" in model_kwargs:
             original_attention_mask = model_kwargs["attention_mask"][i]
             updated_attention_mask = torch.cat(
@@ -588,8 +712,9 @@ def update_input_ids_and_model_kwargs(model, state):
             )
             attention_masks.append(updated_attention_mask)
 
-    # Convert the list of padded input_ids to a tensor
     padded_input_ids_tensor = torch.cat(padded_input_ids, dim=0)
+
+    # Update model_kwargs with outputs from previous step
     model_kwargs = model._update_model_kwargs_for_generation(
         outputs, model_kwargs, is_encoder_decoder=model.config.is_encoder_decoder
     )
@@ -597,13 +722,19 @@ def update_input_ids_and_model_kwargs(model, state):
     # Update the attention masks in model_kwargs
     if attention_masks:
         model_kwargs["attention_mask"] = torch.stack(attention_masks)
+
+    # --- STEP 1: PREPARE FOR DECODING (Default) ---
+    # Update cache_position to point to the last token.
+    # This is required for Qwen2/Llama during normal decoding steps.
+    if "attention_mask" in model_kwargs:
         model_kwargs["cache_position"] = torch.tensor(
             [model_kwargs["attention_mask"].shape[1] - 1],
-            dtype=torch.int64,
-            device=model_kwargs["attention_mask"].device,
+            dtype=torch.long,
+            device=device,
         )
 
-    # Update model_kwargs, set past_key_values to None if any sequence has more than one token to add
+    # --- STEP 2: CHECK FOR PREFILL (Reset) ---
+    # If any sequence has more than 1 token (or other logic), we must reset cache.
     if any(len(tokens) > 1 for tokens in next_tokens):
         model_kwargs["past_key_values"] = None
 
@@ -615,43 +746,44 @@ def update_input_ids_and_model_kwargs(model, state):
             for input_id in padded_input_ids_tensor
         ]
 
-        # Calculate the maximum number of leading pads that can be removed (minimum index of the first non-pad token)
+        # Calculate the maximum number of leading pads that can be removed
         max_pads_to_remove = min(first_non_pad_indices)
 
         # Remove the unnecessary leading pads
         if max_pads_to_remove > 0:
-
             padded_input_ids_tensor = padded_input_ids_tensor[:, max_pads_to_remove:]
             if "attention_mask" in model_kwargs:
                 model_kwargs["attention_mask"] = model_kwargs["attention_mask"][
                     :, max_pads_to_remove:
                 ]
 
+        # --- CRITICAL FIX: CLEANUP STATE FOR PREFILL ---
+        # When resetting to Prefill mode (past_key_values=None), we MUST delete
+        # state variables that are specific to Decoding (like position_ids from the last step).
+        # This forces the model to regenerate them for the full sequence length.
+
+        # 1. Delete position_ids (Fixes GLM-4 shape mismatch)
+        if "position_ids" in model_kwargs:
+            del model_kwargs["position_ids"]
+
+        # 2. Delete cache_position (Fixes Qwen/Llama decoding scalar vs prefill vector mismatch)
+        # We delete the scalar set in STEP 1 so the model can generate a full range vector.
+        if "cache_position" in model_kwargs:
+            del model_kwargs["cache_position"]
+
     # Update unfinished_sequences based on eos_token_id
     if eos_token_id_tensor is not None:
         for i, tokens in enumerate(next_tokens):
             for token in tokens:
-                # --- 修改开始：支持多 EOS Token 检查 ---
-                # 检查当前 token 是否在 EOS 列表中
-                # eos_token_id_tensor 可能是 scalar 也可能是 vector
                 if eos_token_id_tensor.numel() > 1:
-                    # 如果是列表，使用 isin 检查
                     is_eos = torch.isin(token, eos_token_id_tensor)
                 else:
-                    # 如果是标量，直接比较
                     is_eos = (token == eos_token_id_tensor)
 
-                # 如果是 EOS (is_eos为True)，则 unfinished 变为 False (0)
-                # 逻辑：unfinished = unfinished AND (NOT is_eos)
-                # 注意保持 tensor 类型转换，确保 unfinished_sequences[i] 还是一个标量/0维张量
                 if is_eos:
                     unfinished_sequences[i] = 0
-                    # --- 修改结束 ---
 
     return padded_input_ids_tensor, model_kwargs, unfinished_sequences
-
-
-# utils/gac_gen_utils.py
 
 def check_byte_mappings(tokenizer):
     """

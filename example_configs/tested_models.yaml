@@ -38,6 +38,14 @@ CONFIG_API_SERVER:
      score: 100
      priority: 'supportive'
 
+   - weight: '/home/administrator/du/model/01ai/Yi-1___5-9B-Chat' # or 'meta-llama/Meta-Llama-3-8B-Instruct'
+     max_memory:
+       0: '24GiB'
+     num_gpus: 0.3
+     name: 'Yi-1.5-9B-Chat'
+     score: 100
+     priority: 'supportive'
+
 
   # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen2-72B-Instruct'
   #   max_memory:

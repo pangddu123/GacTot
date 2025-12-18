@@ -156,7 +156,7 @@ class ModelGenerator:
         self.state["next_tokens_list"] = next_tokens_list
         (
             self.state["input_ids"],
-            self.state["modefl_kwargs"],
+            self.state["model_kwargs"],
             self.state["unfinished_sequences"],
         ) = update_input_ids_and_model_kwargs(self.model, self.state)
 
