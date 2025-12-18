@@ -97,11 +97,15 @@ def setup_model_actors_and_data(config: List[Dict], norm_type: str, threshold: f
         else:
             logger.info(f"Dispatching matrix build task: {model_name_list[i]} -> {model_name_list[primary_index]}")
             # 调用 remote function
+            # --- 修改开始：传递路径而非对象 ---
+            assist_path = config[i]["weight"]
+            main_path = config[primary_index]["weight"]
+
             ref = create_tot_mapping_matrix_remote.remote(
-                assist_tokenizer=tokenizer,
-                main_tokenizer=main_tokenizer,
-                alpha=0.5,  # ToT 论文推荐值
-                batch_size=4096  # 大 Batch 加速
+                assist_model_path=assist_path,
+                main_model_path=main_path,
+                alpha=0.5,
+                batch_size=4096
             )
             mapping_matrix_refs.append(ref)
 

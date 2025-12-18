@@ -42,12 +42,29 @@ def get_string_vocab(tokenizer):
     return new_vocab
 
 @ray.remote
-def create_tot_mapping_matrix_remote(assist_tokenizer, main_tokenizer, alpha=0.5, batch_size=2048):
+def create_tot_mapping_matrix_remote(assist_model_path, main_model_path, alpha=0.5, batch_size=2048):
     """
     使用 Ray 并行加速和 Batch 处理构建 ToT 映射矩阵。
     此函数在 Ray Worker 上运行，避免阻塞主进程，并利用多核处理。
     """
     import torch  # 在 worker 中导入
+    from transformers import AutoTokenizer
+    # --- 新增：在 Worker 内部加载 Tokenizer ---
+    def load_local_tokenizer(path):
+        # 默认尝试使用 fast tokenizer，并信任远程代码 (解决 GLM-4 等问题)
+        # 如果有特定模型(如 Yi)需要 use_fast=False，可在此添加逻辑，但通常默认即可
+        try:
+            tok = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=True)
+        except Exception:
+            # 回退尝试
+            tok = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
+
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        return tok
+
+    assist_tokenizer = load_local_tokenizer(assist_model_path)
+    main_tokenizer = load_local_tokenizer(main_model_path)
 
     # ------------------------------------------------------------------
     # 0. 预处理与词表修正 (Qwen 等模型的防御性编程)
