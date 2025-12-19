@@ -25,6 +25,7 @@ class ModelGenerator:
         model_ensemble_weight=1,
         use_cache=True,
         quantization="none",
+        enable_thinking=None
     ):
 
         quantization_options = {
@@ -63,7 +64,7 @@ class ModelGenerator:
         self.model_name = model_name
         self.model_ensemble_weight = model_ensemble_weight
         self.use_cache = use_cache
-
+        self.enable_thinking = enable_thinking
         # Load model to GPU
         self.model = dispatch_model(model, **device_map_kwargs)
         if self.model_name in ["Yi-34B-Chat", "Yi-6B-Chat"]:
@@ -206,6 +207,13 @@ class ModelGenerator:
         # Calculate the truncation length as 75% of the minimum max_position_embeddings
         truncation_length = int(min_max_position_embeddings * 0.75)
         input_texts = []
+
+        # [修改 3] 准备传递给模板的额外参数
+        template_kwargs = {}
+        if self.enable_thinking is not None:
+            # 只有当明确配置了 True/False 时才传递，避免影响不支持此参数的旧模型
+            template_kwargs["enable_thinking"] = self.enable_thinking
+
 
         # Apply the chat template and collect the processed text
         for chat in chat_list:

@@ -4,7 +4,7 @@ THRESHOLD_API_SERVER: 1.0
 CONFIG_API_SERVER:
 
 
-   - weight: '/home/administrator/du/model/qwen/Qwen1___5-7B-Chat' # or 'meta-llama/Meta-Llama-3-70B-Instruct'
+   - weight: '/home/administrator/du/model/qwen/Qwen1___5-7B-Chat'
      max_memory:
        0: '24GiB'
      num_gpus: 0.2
@@ -12,10 +12,10 @@ CONFIG_API_SERVER:
      score: 100
      priority: 'supportive'
 
-   - weight: '/home/administrator/du/model/glm-4-9b' # or 'meta-llama/Meta-Llama-3-70B-Instruct'
+   - weight: '/home/administrator/du/model/glm-4-9b'
      max_memory:
        0: '24GiB'
-     num_gpus: 0.3
+     num_gpus: 0.2
      name: 'Glm4-9B'
      score: 100
      priority: 'supportive'
@@ -29,8 +29,9 @@ CONFIG_API_SERVER:
      name: 'Qwen2.5-7B-Chat'
      score: 100
      priority: 'supportive'
-#
-   - weight: '/home/administrator/du/model/LLM-Research/Meta-Llama-3___1-8B-Instruct' # or 'meta-llama/Meta-Llama-3-8B-Instruct'
+
+  #
+   - weight: '/home/administrator/du/model/LLM-Research/Meta-Llama-3___1-8B-Instruct'
      max_memory:
        0: '24GiB'
      num_gpus: 0.3
@@ -38,13 +39,24 @@ CONFIG_API_SERVER:
      score: 100
      priority: 'supportive'
 
-   - weight: '/home/administrator/du/model/01ai/Yi-1___5-9B-Chat' # or 'meta-llama/Meta-Llama-3-8B-Instruct'
+
+   - weight: '/home/administrator/du/model/Qwen/Qwen3-8B'
      max_memory:
        0: '24GiB'
-     num_gpus: 0.3
-     name: 'Yi-1.5-9B-Chat'
+     num_gpus: 0.2
+     name: 'Qwen3-8B'
      score: 100
      priority: 'supportive'
+     enable_thinking: true
+
+#
+#   - weight: '/home/administrator/du/model/01ai/Yi-1___5-9B-Chat' # or 'meta-llama/Meta-Llama-3-8B-Instruct'
+#     max_memory:
+#       0: '24GiB'
+#     num_gpus: 0.3
+#     name: 'Yi-1.5-9B-Chat'
+#     score: 100
+#     priority: 'supportive'
 
 
   # - weight: '[Please replace with the path with the local model weight]' # or 'Qwen/Qwen2-72B-Instruct'

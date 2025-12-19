@@ -47,8 +47,10 @@ def setup_model_actors_and_data(config: List[Dict], norm_type: str, threshold: f
             max_memory=model_config["max_memory"],
             model_name=model_config["name"],
             model_ensemble_weight=model_config["score"],
-            use_cache=True,  # ToT 建议常开 Cache
-            quantization=model_config["quantization"]
+            use_cache=True,
+            quantization=model_config["quantization"],
+            # 新增：从配置中获取 enable_thinking，如果没有则默认为 None
+            enable_thinking=model_config.get("enable_thinking", None)
         )
         for i, model_config in enumerate(config)
     ]
